@@ -1,11 +1,10 @@
 import 'dart:async';
-
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import "dart:math";
 import './write.dart';
 import './read.dart';
+import './product.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized(); //ensure everythings initialized!
@@ -76,7 +75,7 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   String _text = '';
   Map _result = {};
-  final _testRef = FirebaseDatabase.instance.ref().child("test");
+  final _database = FirebaseDatabase.instance.ref();
   late StreamSubscription _productStream;
 
   @override
@@ -93,7 +92,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
 //constantly listens to changes in the test subclass of database as it is in initState!
   void _activateListeners() {
-    _testRef.onValue.listen((event) {
+    _database.child('test').onValue.listen((event) {
       final Object? _messages = event.snapshot.value;
       setState(() {
         _result = _messages as Map;
@@ -103,7 +102,8 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void _upload(x) {
     //uploads to the database child "test" and replaces whatever was there before
-    _testRef
+    _database
+        .child('test')
         .push()
         .set(x)
         .then((_) => print("upload sucesfull!"))
@@ -112,25 +112,41 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
         appBar: AppBar(title: const Text("Firebase Test!")),
         body: Center(
             child:
                 Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          SizedBox(
-              height: 300,
-              child: ListView.builder(
-                  itemCount: _result.length,
-                  itemBuilder: (context, index) {
-                    return Text(
-                        _result[_result.keys.toList()[index]] ?? "null");
-                  })),
+          //StreamBuilder actively listens to data and updates whenever it changes. Thus no need for setState and activeListeners!
+          StreamBuilder(
+              stream: _database
+                  .child('products')
+                  .orderByKey()
+                  .limitToLast(10)
+                  .onValue,
+              builder: (context, snapshot) {
+                final prodList = <Widget>[];
+                if (snapshot.hasData &&
+                    !snapshot.hasError &&
+                    (snapshot.data! as DatabaseEvent).snapshot.value != null) {
+                  Map myProds =
+                      (snapshot.data! as DatabaseEvent).snapshot.value as Map;
+                  prodList.addAll(myProds.values.map((value) {
+                    final _product =
+                        Product.fromRTDB(Map<String, dynamic>.from(value));
+                    return ElevatedButton(
+                        child: Text(_product.name),
+                        onPressed: () {
+                          print(_product.description);
+                        });
+                  }));
+                }
+                return SizedBox(
+                    height: 300,
+                    child: ListView(
+                      children: prodList,
+                    ));
+              }),
           TextFormField(
               decoration: const InputDecoration(labelText: "upload:"),
               onChanged: (String value) {
